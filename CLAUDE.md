@@ -30,7 +30,9 @@ src/
 │   └── globals.css
 ├── components/
 │   ├── layout/            # Layout components (Header, Footer)
-│   └── ui/                # Reusable UI components (Button, Card, Input)
+│   └── ui/
+│       ├── mui/           # MUI wrapper components (use in server components)
+│       └── [tailwind]     # Tailwind-based UI components
 ├── features/              # Feature-based modules (core pattern)
 │   ├── auth/              # Authentication feature
 │   ├── posts/             # Posts feature
@@ -38,6 +40,9 @@ src/
 ├── lib/                   # Utility functions
 │   ├── api.ts             # fetcher wrapper
 │   └── utils.ts           # cn(), formatDate(), truncate()
+├── theme/                 # MUI theme configuration
+│   ├── index.ts           # Main theme with typography, shadows, z-index
+│   └── palette.ts         # Colors mapped from Tailwind tokens
 ├── types/                 # Global type definitions
 └── tailwind.config.ts     # Tailwind with sharedClasses export
 ```
@@ -61,6 +66,9 @@ feature-name/
 
 ### Styling
 
+This project uses a **hybrid approach**: Tailwind CSS + Material UI (MUI).
+
+#### Tailwind CSS
 - **Tailwind CSS v4** via `@tailwindcss/postcss`
 - **Custom config**: `tailwind.config.ts` includes:
   - Extended color palette (primary, secondary, accent, neutral, success, warning, error)
@@ -68,6 +76,28 @@ feature-name/
   - **`sharedClasses` export**: Pre-configured class strings for consistent styling
 - **Utility**: `cn()` from `@/lib/utils` merges clsx + tailwind-merge
 - **Dark mode**: Uses `class` strategy (add `dark` class to `<html>`)
+
+#### Material UI (MUI)
+- **MUI v5** with Emotion styling
+- **Theme**: `src/theme/` maps Tailwind colors to MUI palette
+- **Wrapper components**: `src/components/ui/mui/` provides client wrappers for use in server components
+- **Usage**:
+  ```typescript
+  import { MuiButton, MuiCard, MuiTextField } from '@/components/ui/mui';
+
+  // Works in server components (no 'use client' needed)
+  export default function Page() {
+    return <MuiButton variant="contained">Click</MuiButton>;
+  }
+  ```
+- **Available wrappers**: MuiButton, MuiCard, MuiCardContent, MuiCardActions, MuiTextField, MuiTypography, MuiStack, MuiBox, MuiChip, MuiAlert
+
+**For interactive components with hooks**: Use direct MUI imports with `'use client'`:
+```typescript
+'use client';
+import { useState } from 'react';
+import TextField from '@mui/material/TextField';
+```
 
 ### Data Fetching
 
@@ -100,3 +130,10 @@ Prefer `@/features/...` or `@/lib/...` over relative paths.
 NextAuth.js v4 configured at `src/app/api/auth/[...nextauth]/route.ts`. Auth feature includes:
 - `useAuth()` hook in `src/features/auth/hooks/`
 - Sign-in component in `src/features/auth/components/`
+
+### Root Layout
+
+`src/app/layout.tsx` wraps the app with MUI providers:
+- `AppRouterCacheProvider` - MUI Next.js integration
+- `ThemeProvider` - MUI theme from `@/theme`
+- `CssBaseline` - MUI CSS normalization
