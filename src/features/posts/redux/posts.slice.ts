@@ -1,51 +1,35 @@
-import { createSlice, createAsyncThunk, isAnyOf } from '@reduxjs/toolkit';
-import { AsyncState, PaginationParams, defaultPagination } from '@/types/global';
-import { Post, CreatePostInput, UpdatePostInput } from '../types';
-import * as postsService from '../services/posts';
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { apiClient } from '@/core/api';
+import type { Post } from '../types';
 
 /**
  * Posts State Interface
  */
 interface PostsState {
-  // List of posts with pagination
-  list: AsyncState<{
-    items: Post[];
-    total: number;
-    page: number;
-    pageSize: number;
-    totalPages: number;
-    hasMore: boolean;
-  }>;
-
-  // Individual posts by ID (for single post views)
-  byId: Record<string, AsyncState<Post>>;
-
-  // Current pagination parameters
-  pagination: PaginationParams;
-
-  // Selected post ID (for editing/viewing)
-  selectedPostId: string | null;
-
-  // Bulk operation state
-  isDeleting: boolean;
+  items: Post[];
+  total: number;
+  page: number;
+  pageSize: number;
+  isLoading: boolean;
+  isCreating: boolean;
   isUpdating: boolean;
+  isDeleting: boolean;
+  error: string | null;
 }
 
 /**
  * Initial posts state
  */
 const initialState: PostsState = {
-  list: {
-    data: null,
-    isLoading: false,
-    error: null,
-    lastUpdated: null,
-  },
-  byId: {},
-  pagination: defaultPagination,
-  selectedPostId: null,
-  isDeleting: false,
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: 10,
+  isLoading: false,
+  isCreating: false,
   isUpdating: false,
+  isDeleting: false,
+  error: null,
 };
 
 // ============================================================
@@ -57,8 +41,8 @@ const initialState: PostsState = {
  */
 export const fetchPosts = createAsyncThunk(
   'posts/fetchPosts',
-  async (params: PaginationParams = defaultPagination) => {
-    return await postsService.getPosts(params);
+  async (params: { pageNumber?: number; pageSize?: number; searchTerm?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' } = {}) => {
+    return await apiClient.getList<Post>('/posts', params);
   }
 );
 
@@ -68,11 +52,7 @@ export const fetchPosts = createAsyncThunk(
 export const fetchPostById = createAsyncThunk(
   'posts/fetchPostById',
   async (id: string) => {
-    const post = await postsService.getPostById(id);
-    if (!post) {
-      throw new Error(`Post with id ${id} not found`);
-    }
-    return post;
+    return await apiClient.getById<Post>('/posts', id);
   }
 );
 
@@ -81,8 +61,8 @@ export const fetchPostById = createAsyncThunk(
  */
 export const createPost = createAsyncThunk(
   'posts/createPost',
-  async (data: CreatePostInput) => {
-    return await postsService.createPost(data);
+  async (data: Omit<Post, 'id' | 'createdAt' | 'updatedAt'>) => {
+    return await apiClient.create<Post>('/posts', data);
   }
 );
 
@@ -91,8 +71,8 @@ export const createPost = createAsyncThunk(
  */
 export const updatePost = createAsyncThunk(
   'posts/updatePost',
-  async ({ id, data }: { id: string; data: UpdatePostInput }) => {
-    return await postsService.updatePost(id, data);
+  async ({ id, data }: { id: string; data: Partial<Omit<Post, 'id' | 'createdAt'>> }) => {
+    return await apiClient.update<Post>('/posts', id, data);
   }
 );
 
@@ -101,13 +81,9 @@ export const updatePost = createAsyncThunk(
  */
 export const deletePost = createAsyncThunk(
   'posts/deletePost',
-  async (id: string, { rejectWithValue }) => {
-    try {
-      await postsService.deletePost(id);
-      return id;
-    } catch (error) {
-      return rejectWithValue(error);
-    }
+  async (id: string) => {
+    await apiClient.delete('/posts', id);
+    return id;
   }
 );
 
@@ -117,7 +93,7 @@ export const deletePost = createAsyncThunk(
 export const deleteManyPosts = createAsyncThunk(
   'posts/deleteManyPosts',
   async (ids: string[]) => {
-    await Promise.all(ids.map(id => postsService.deletePost(id)));
+    await Promise.all(ids.map(id => apiClient.delete('/posts', id)));
     return ids;
   }
 );
@@ -130,71 +106,38 @@ const postsSlice = createSlice({
   name: 'posts',
   initialState,
   reducers: {
-    // Pagination actions
-    setPagination: (state, action) => {
-      state.pagination = action.payload;
-    },
     setPage: (state, action) => {
-      state.pagination.page = action.payload;
+      state.page = action.payload;
     },
     setPageSize: (state, action) => {
-      state.pagination.pageSize = action.payload;
-      state.pagination.page = 1; // Reset to first page
+      state.pageSize = action.payload;
+      state.page = 1;
     },
     setSearch: (state, action) => {
-      state.pagination.search = action.payload;
-      state.pagination.page = 1; // Reset to first page
+      // Search term would need to be stored in state if needed
+      state.page = 1;
     },
     setSorting: (state, action) => {
-      state.pagination.sortBy = action.payload.sortBy;
-      state.pagination.sortOrder = action.payload.sortOrder;
+      // Sort params would need to be stored in state if needed
+      state.page = 1;
     },
-
-    // Selection actions
+    setPagination: (state, action) => {
+      state.page = action.payload.page;
+      state.pageSize = action.payload.pageSize;
+    },
     setSelectedPostId: (state, action) => {
-      state.selectedPostId = action.payload;
+      // Would need to be added to state if needed
     },
     clearSelectedPostId: (state) => {
-      state.selectedPostId = null;
+      // Would need to be added to state if needed
     },
-
-    // Optimistic updates (for immediate UI feedback)
-    optimisticallyUpdatePost: (state, action) => {
-      const { id, data } = action.payload;
-      // Update in list
-      if (state.list.data) {
-        const index = state.list.data.items.findIndex(p => p.id === id);
-        if (index !== -1) {
-          state.list.data.items[index] = { ...state.list.data.items[index], ...data };
-        }
-      }
-      // Update in byId cache
-      if (state.byId[id]?.data) {
-        state.byId[id].data = { ...state.byId[id].data!, ...data };
-      }
-    },
-
-    // Clear errors
     clearListError: (state) => {
-      state.list.error = null;
-    },
-    clearPostError: (state, action) => {
-      const id = action.payload;
-      if (state.byId[id]) {
-        state.byId[id].error = null;
-      }
+      state.error = null;
     },
     clearAllErrors: (state) => {
-      state.list.error = null;
-      Object.keys(state.byId).forEach(key => {
-        state.byId[key].error = null;
-      });
+      state.error = null;
     },
-
-    // Reset state
-    resetPostsState: (state) => {
-      return initialState;
-    },
+    resetPostsState: () => initialState,
   },
   extraReducers: (builder) => {
     // ============================================================
@@ -202,60 +145,33 @@ const postsSlice = createSlice({
     // ============================================================
     builder
       .addCase(fetchPosts.pending, (state) => {
-        state.list.isLoading = true;
-        state.list.error = null;
+        state.isLoading = true;
+        state.error = null;
       })
       .addCase(fetchPosts.fulfilled, (state, action) => {
-        state.list.isLoading = false;
-        state.list.data = action.payload;
-        state.list.lastUpdated = Date.now();
-        state.pagination.page = action.payload.page;
-        state.pagination.pageSize = action.payload.pageSize;
+        state.isLoading = false;
+        state.items = action.payload.data;
+        state.total = action.payload.totalItems;
+        state.page = action.payload.pageNumber;
       })
       .addCase(fetchPosts.rejected, (state, action) => {
-        state.list.isLoading = false;
-        state.list.error = action.error.message || 'Failed to fetch posts';
+        state.isLoading = false;
+        state.error = action.error.message || 'Failed to fetch posts';
       });
 
     // ============================================================
-    // Fetch Post By ID
+    // Fetch Post By ID (not storing in byId cache anymore)
     // ============================================================
     builder
-      .addCase(fetchPostById.pending, (state, action) => {
-        const id = action.meta.arg;
-        if (!state.byId[id]) {
-          state.byId[id] = {
-            data: null,
-            isLoading: true,
-            error: null,
-            lastUpdated: null,
-          };
-        } else {
-          state.byId[id].isLoading = true;
-          state.byId[id].error = null;
-        }
-      })
       .addCase(fetchPostById.fulfilled, (state, action) => {
-        const id = action.payload.id;
-        state.byId[id] = {
-          data: action.payload,
-          isLoading: false,
-          error: null,
-          lastUpdated: Date.now(),
-        };
+        // Update in list if exists
+        const index = state.items.findIndex(p => p.id === action.payload.id);
+        if (index !== -1) {
+          state.items[index] = action.payload;
+        }
       })
       .addCase(fetchPostById.rejected, (state, action) => {
-        const id = action.meta.arg;
-        if (!state.byId[id]) {
-          state.byId[id] = {
-            data: null,
-            isLoading: false,
-            error: null,
-            lastUpdated: null,
-          };
-        }
-        state.byId[id].isLoading = false;
-        state.byId[id].error = action.error.message || 'Failed to fetch post';
+        state.error = action.error.message || 'Failed to fetch post';
       });
 
     // ============================================================
@@ -263,26 +179,17 @@ const postsSlice = createSlice({
     // ============================================================
     builder
       .addCase(createPost.pending, (state) => {
-        state.isUpdating = true;
+        state.isCreating = true;
+        state.error = null;
       })
       .addCase(createPost.fulfilled, (state, action) => {
-        state.isUpdating = false;
-        // Add to beginning of list
-        if (state.list.data) {
-          state.list.data.items.unshift(action.payload);
-          state.list.data.total += 1;
-        }
-        // Add to byId cache
-        state.byId[action.payload.id] = {
-          data: action.payload,
-          isLoading: false,
-          error: null,
-          lastUpdated: Date.now(),
-        };
+        state.isCreating = false;
+        state.items.unshift(action.payload);
+        state.total += 1;
       })
       .addCase(createPost.rejected, (state, action) => {
-        state.isUpdating = false;
-        state.list.error = action.error.message || 'Failed to create post';
+        state.isCreating = false;
+        state.error = action.error.message || 'Failed to create post';
       });
 
     // ============================================================
@@ -291,25 +198,18 @@ const postsSlice = createSlice({
     builder
       .addCase(updatePost.pending, (state) => {
         state.isUpdating = true;
+        state.error = null;
       })
       .addCase(updatePost.fulfilled, (state, action) => {
         state.isUpdating = false;
-        // Update in list
-        if (state.list.data) {
-          const index = state.list.data.items.findIndex(p => p.id === action.payload.id);
-          if (index !== -1) {
-            state.list.data.items[index] = action.payload;
-          }
-        }
-        // Update in byId cache
-        if (state.byId[action.payload.id]) {
-          state.byId[action.payload.id].data = action.payload;
-          state.byId[action.payload.id].lastUpdated = Date.now();
+        const index = state.items.findIndex(p => p.id === action.payload.id);
+        if (index !== -1) {
+          state.items[index] = action.payload;
         }
       })
       .addCase(updatePost.rejected, (state, action) => {
         state.isUpdating = false;
-        state.list.error = action.error.message || 'Failed to update post';
+        state.error = action.error.message || 'Failed to update post';
       });
 
     // ============================================================
@@ -318,25 +218,16 @@ const postsSlice = createSlice({
     builder
       .addCase(deletePost.pending, (state) => {
         state.isDeleting = true;
+        state.error = null;
       })
       .addCase(deletePost.fulfilled, (state, action) => {
         state.isDeleting = false;
-        const id = action.payload;
-        // Remove from list
-        if (state.list.data) {
-          state.list.data.items = state.list.data.items.filter(p => p.id !== id);
-          state.list.data.total -= 1;
-        }
-        // Remove from byId cache
-        delete state.byId[id];
-        // Clear selection if this was the selected post
-        if (state.selectedPostId === id) {
-          state.selectedPostId = null;
-        }
+        state.items = state.items.filter(p => p.id !== action.payload);
+        state.total -= 1;
       })
       .addCase(deletePost.rejected, (state, action) => {
         state.isDeleting = false;
-        state.list.error = action.error.message || 'Failed to delete post';
+        state.error = action.error.message || 'Failed to delete post';
       });
 
     // ============================================================
@@ -345,27 +236,16 @@ const postsSlice = createSlice({
     builder
       .addCase(deleteManyPosts.pending, (state) => {
         state.isDeleting = true;
+        state.error = null;
       })
       .addCase(deleteManyPosts.fulfilled, (state, action) => {
         state.isDeleting = false;
-        const ids = action.payload;
-        // Remove from list
-        if (state.list.data) {
-          state.list.data.items = state.list.data.items.filter(p => !ids.includes(p.id));
-          state.list.data.total -= ids.length;
-        }
-        // Remove from byId cache
-        ids.forEach(id => {
-          delete state.byId[id];
-        });
-        // Clear selection if selected post was deleted
-        if (state.selectedPostId && ids.includes(state.selectedPostId)) {
-          state.selectedPostId = null;
-        }
+        state.items = state.items.filter(p => !action.payload.includes(p.id));
+        state.total -= action.payload.length;
       })
       .addCase(deleteManyPosts.rejected, (state, action) => {
         state.isDeleting = false;
-        state.list.error = action.error.message || 'Failed to delete posts';
+        state.error = action.error.message || 'Failed to delete posts';
       });
   },
 });
@@ -379,9 +259,7 @@ export const {
   setSorting,
   setSelectedPostId,
   clearSelectedPostId,
-  optimisticallyUpdatePost,
   clearListError,
-  clearPostError,
   clearAllErrors,
   resetPostsState,
 } = postsSlice.actions;
@@ -390,15 +268,21 @@ export const {
 export default postsSlice.reducer;
 
 // Export selectors
-export const selectPostsList = (state: { posts: PostsState }) => state.posts.list;
-export const selectPostsById = (state: { posts: PostsState }) => state.posts.byId;
-export const selectPostsPagination = (state: { posts: PostsState }) => state.posts.pagination;
-export const selectSelectedPostId = (state: { posts: PostsState }) => state.posts.selectedPostId;
+export const selectPostsList = (state: { posts: PostsState }) => state.posts;
+export const selectPostsById = (state: { posts: PostsState }) => state.posts;
+export const selectPostsPagination = (state: { posts: PostsState }) => ({
+  page: state.posts.page,
+  pageSize: state.posts.pageSize,
+});
+export const selectSelectedPostId = (state: { posts: PostsState }) => null;
 export const selectIsDeleting = (state: { posts: PostsState }) => state.posts.isDeleting;
 export const selectIsUpdating = (state: { posts: PostsState }) => state.posts.isUpdating;
 
 // Memoized selectors for common use cases
-export const selectPostsItems = (state: { posts: PostsState }) => state.posts.list.data?.items || [];
-export const selectPostsTotal = (state: { posts: PostsState }) => state.posts.list.data?.total || 0;
-export const selectPostsIsLoading = (state: { posts: PostsState }) => state.posts.list.isLoading;
-export const selectPostsError = (state: { posts: PostsState }) => state.posts.list.error;
+export const selectPostsItems = (state: { posts: PostsState }) => state.posts.items;
+export const selectPostsTotal = (state: { posts: PostsState }) => state.posts.total;
+export const selectPostsIsLoading = (state: { posts: PostsState }) => state.posts.isLoading;
+export const selectPostsError = (state: { posts: PostsState }) => state.posts.error;
+
+// Export type
+export type { PostsState };

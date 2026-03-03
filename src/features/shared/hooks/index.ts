@@ -1,1 +1,3 @@
-// Shared hooks will be exported here
+// Shared hooks exports
+
+export {};

@@ -1,55 +1,37 @@
-import { ApiBase } from '../api-base';
-import type { ApiServiceConfig, EntityWithId } from './types';
+/**
+ * API service factory - simplified version
+ *
+ * Mock services have been removed - use real backend API instead
+ */
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+import { apiClient } from '@/core/api';
+import type { PaginationParams, PagedResult } from '@/core/api';
+import type { EntityWithId } from './types';
 
 /**
- * Creates an API service for a feature
- *
- * @param endpoint - API endpoint (e.g., '/posts')
- * @param config - Optional configuration
- * @returns ApiBase instance with CRUD methods
+ * Creates an API service object for a feature
+ * This is a lightweight wrapper around apiClient for type safety
  *
  * @example
  * export const postsApi = createApiService<Post>('/posts');
- *
- * @example
- * export const commentsApi = createApiService<Comment>('/comments', {
- *   transformRequest: (data) => ({ ...data, userId: getCurrentUser() }),
- *   transformResponse: (data) => normalizeDates(data),
- * });
  */
-export function createApiService<TEntity extends EntityWithId>(
-  endpoint: string,
-  config: ApiServiceConfig<TEntity> = {}
-): ApiBase<TEntity> {
-  const {
-    transformRequest,
-    transformResponse,
-    headers,
-  } = config;
+export function createApiService<TEntity extends EntityWithId>(endpoint: string) {
+  return {
+    list: (params?: PaginationParams): Promise<PagedResult<TEntity>> =>
+      apiClient.getList<TEntity>(endpoint, params),
 
-  // Extend ApiBase with transforms
-  class ApiServiceWithTransforms extends ApiBase<TEntity> {
-    constructor() {
-      super(endpoint, BASE_URL);
-    }
+    getById: (id: string | number): Promise<TEntity> =>
+      apiClient.getById<TEntity>(endpoint, id),
 
-    // Override methods to apply transforms
-    async create(data: any): Promise<TEntity> {
-      const requestData = transformRequest ? transformRequest(data) : data;
-      return super.create(requestData);
-    }
+    create: (data: unknown): Promise<TEntity> =>
+      apiClient.create<TEntity>(endpoint, data),
 
-    async update(id: string | number, data: any): Promise<TEntity> {
-      const requestData = transformRequest ? transformRequest(data) : data;
-      return super.update(id, requestData);
-    }
-  }
+    update: (id: string | number, data: unknown): Promise<TEntity> =>
+      apiClient.update<TEntity>(endpoint, id, data),
 
-  const apiService = new ApiServiceWithTransforms();
-
-  return apiService;
+    delete: (id: string | number): Promise<void> =>
+      apiClient.delete(endpoint, id),
+  };
 }
 
 /**
@@ -62,108 +44,22 @@ export function createApiService<TEntity extends EntityWithId>(
  * );
  */
 export function createNestedApiService<TEntity extends EntityWithId>(
-  getEndpoint: (params: any) => string,
-  config?: ApiServiceConfig<TEntity>
-): ApiBase<TEntity> {
-  const apiService = new (class extends ApiBase<TEntity> {
-    constructor() {
-      super('', BASE_URL);
-    }
-
-    private getEndpointUrl(params?: any): string {
-      const path = getEndpoint(params || {});
-      return this.getUrl(path);
-    }
-  })();
-
-  return apiService;
-}
-
-/**
- * Creates an API service with mock data for development
- *
- * @example
- * export const mockPostsApi = createMockApiService<Post>(mockPosts, {
- *   delay: 500,
- * });
- */
-export function createMockApiService<TEntity extends EntityWithId>(
-  mockData: TEntity[],
-  config: { delay?: number; enableMutations?: boolean } = {}
+  getEndpoint: (params: any) => string
 ) {
-  const { delay = 500, enableMutations = true } = config;
-  let data = [...mockData];
-
-  const wait = () => new Promise((resolve) => setTimeout(resolve, delay));
-
   return {
-    async list(params?: any): Promise<{ items: TEntity[]; total: number; page: number; pageSize: number; totalPages: number; hasMore: boolean }> {
-      await wait();
-      let filtered = [...data];
+    list: (params: any, pagination?: PaginationParams): Promise<PagedResult<TEntity>> =>
+      apiClient.getList<TEntity>(getEndpoint(params), pagination),
 
-      // Apply search
-      if (params?.search) {
-        const searchLower = params.search.toLowerCase();
-        filtered = filtered.filter((item: any) =>
-          JSON.stringify(item).toLowerCase().includes(searchLower)
-        );
-      }
+    getById: (params: any, id: string | number): Promise<TEntity> =>
+      apiClient.getById<TEntity>(getEndpoint(params), id),
 
-      // Apply pagination
-      const page = params?.page || 1;
-      const pageSize = params?.pageSize || 10;
-      const total = filtered.length;
-      const totalPages = Math.ceil(total / pageSize);
-      const startIndex = (page - 1) * pageSize;
-      const items = filtered.slice(startIndex, startIndex + pageSize);
+    create: (params: any, data: unknown): Promise<TEntity> =>
+      apiClient.create<TEntity>(getEndpoint(params), data),
 
-      return {
-        items,
-        total,
-        page,
-        pageSize,
-        totalPages,
-        hasMore: page < totalPages,
-      };
-    },
+    update: (params: any, id: string | number, data: unknown): Promise<TEntity> =>
+      apiClient.update<TEntity>(getEndpoint(params), id, data),
 
-    async getById(id: string | number): Promise<TEntity> {
-      await wait();
-      const item = data.find((item) => item.id === id);
-      if (!item) throw new Error(`Item with id ${id} not found`);
-      return item;
-    },
-
-    async create(itemData: any): Promise<TEntity> {
-      await wait();
-      if (!enableMutations) throw new Error('Mutations disabled');
-      const newItem = {
-        ...itemData,
-        id: Date.now().toString(),
-      } as TEntity;
-      data.unshift(newItem);
-      return newItem;
-    },
-
-    async update(id: string | number, itemData: any): Promise<TEntity> {
-      await wait();
-      if (!enableMutations) throw new Error('Mutations disabled');
-      const index = data.findIndex((item) => item.id === id);
-      if (index === -1) throw new Error(`Item with id ${id} not found`);
-      data[index] = { ...data[index], ...itemData };
-      return data[index];
-    },
-
-    async delete(id: string | number): Promise<void> {
-      await wait();
-      if (!enableMutations) throw new Error('Mutations disabled');
-      data = data.filter((item) => item.id !== id);
-    },
-
-    async deleteMany(ids: (string | number)[]): Promise<void> {
-      await wait();
-      if (!enableMutations) throw new Error('Mutations disabled');
-      data = data.filter((item) => !ids.includes(item.id));
-    },
+    delete: (params: any, id: string | number): Promise<void> =>
+      apiClient.delete(getEndpoint(params), id),
   };
 }

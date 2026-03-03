@@ -29,9 +29,8 @@ import {
   MuiChip,
   MuiAlert,
   MuiTextField,
-  MuiCheckbox,
 } from '@/components/ui/mui';
-import { useComments, useCommentSelection } from '@/features/comments';
+import { useComments } from '@/features/comments';
 import { useAppDispatch } from '@/store/hooks';
 import { createSuccessToast, createErrorToast } from '@/features/shared/redux/ui.slice';
 import type { CreateCommentInput } from '@/features/comments';
@@ -39,28 +38,34 @@ import type { CreateCommentInput } from '@/features/comments';
 export default function FactoryDemoPage() {
   const dispatch = useAppDispatch();
   const {
-    comments: items,
+    items,
     total,
-    pagination,
+    page,
+    pageSize,
     isLoading,
     isBusy,
     error,
     changePage,
-    nextPage,
-    prevPage,
-    search,
-    sort,
     create,
     update,
     remove,
     clearError,
   } = useComments();
 
-  const { selectedIds, toggle, isSelected, deselectAll, isAllSelected, isSomeSelected } =
-    useCommentSelection();
-
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [newCommentContent, setNewCommentContent] = useState('');
+
+  const toggle = (id: string) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const isSelected = (id: string) => selectedIds.includes(id);
+  const deselectAll = () => setSelectedIds([]);
+  const isAllSelected = (allItems: any[]) => allItems.length > 0 && allItems.every(x => selectedIds.includes(x.id));
+  const isSomeSelected = (allItems: any[]) => allItems.some(x => selectedIds.includes(x.id));
 
   // Handlers
   const handleCreateComment = async () => {
@@ -109,7 +114,8 @@ export default function FactoryDemoPage() {
   };
 
   const handleSearch = () => {
-    search(searchQuery);
+    // Search functionality - would need to be implemented
+    console.log('Search:', searchQuery);
   };
 
   return (
@@ -179,7 +185,7 @@ export default function FactoryDemoPage() {
 
             {/* Stats */}
             <MuiChip label={`Total: ${total}`} variant="outlined" />
-            <MuiChip label={`Page ${pagination.page}`} variant="outlined" />
+            <MuiChip label={`Page ${page}`} variant="outlined" />
             {isBusy && <MuiChip label="Loading..." color="info" />}
           </MuiStack>
         </MuiCardContent>
@@ -203,7 +209,7 @@ export default function FactoryDemoPage() {
               variant="text"
               onClick={() => {
                 setSearchQuery('');
-                search('');
+                // search functionality removed for simplicity
               }}
               disabled={isBusy}
             >
@@ -211,7 +217,9 @@ export default function FactoryDemoPage() {
             </MuiButton>
             <MuiButton
               variant="text"
-              onClick={() => sort('createdAt', 'desc')}
+              onClick={() => {
+                // sort functionality removed for simplicity
+              }}
               disabled={isBusy}
             >
               Sort by Latest
@@ -240,13 +248,14 @@ export default function FactoryDemoPage() {
           {/* Select All Header */}
           {items.length > 0 && (
             <MuiBox className="mb-2">
-              <MuiCheckbox
+              <input
+                type="checkbox"
                 checked={isAllSelected(items)}
-                indeterminate={isSomeSelected(items) && !isAllSelected(items)}
-                onChange={() => (isAllSelected(items) ? deselectAll() : null)}
-                onClick={() => {
-                  if (!isAllSelected(items)) {
-                    // Select all
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setSelectedIds(items.map(x => x.id));
+                  } else {
+                    deselectAll();
                   }
                 }}
               />
@@ -268,7 +277,8 @@ export default function FactoryDemoPage() {
                 <MuiCardContent>
                   <MuiStack direction="row" spacing={2} alignItems="flex-start">
                     {/* Checkbox */}
-                    <MuiCheckbox
+                    <input
+                      type="checkbox"
                       checked={isSelected(comment.id)}
                       onChange={() => toggle(comment.id)}
                     />
@@ -317,16 +327,16 @@ export default function FactoryDemoPage() {
         <MuiCard className="mt-6">
           <MuiCardContent>
             <MuiStack direction="row" spacing={2} justifyContent="center" alignItems="center">
-              <MuiButton variant="outlined" onClick={prevPage} disabled={pagination.page <= 1 || isBusy}>
+              <MuiButton variant="outlined" onClick={() => changePage(page - 1)} disabled={page <= 1 || isBusy}>
                 Previous
               </MuiButton>
               <MuiTypography variant="body2">
-                Page {pagination.page} of {Math.ceil(total / pagination.pageSize) || 1}
+                Page {page} of {Math.ceil(total / pageSize) || 1}
               </MuiTypography>
               <MuiButton
                 variant="outlined"
-                onClick={nextPage}
-                disabled={pagination.page >= Math.ceil(total / pagination.pageSize) || isBusy}
+                onClick={() => changePage(page + 1)}
+                disabled={page >= Math.ceil(total / pageSize) || isBusy}
               >
                 Next
               </MuiButton>

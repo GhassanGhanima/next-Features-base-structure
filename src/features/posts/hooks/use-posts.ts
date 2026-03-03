@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import type { PaginationParams } from '@/types/global';
 import {
   fetchPosts,
   fetchPostById,
@@ -21,7 +22,6 @@ import {
   selectPostsPagination,
   selectIsUpdating,
   selectIsDeleting,
-  type PaginationParams,
 } from '../redux';
 import type { CreatePostInput, UpdatePostInput } from '../types';
 
@@ -62,7 +62,7 @@ export function usePosts(initialFetch = true) {
   const changePage = useCallback(
     (page: number) => {
       dispatch(setPage(page));
-      dispatch(fetchPosts({ ...pagination, page }));
+      dispatch(fetchPosts({ ...pagination, pageNumber: page }));
     },
     [dispatch, pagination]
   );
@@ -70,7 +70,7 @@ export function usePosts(initialFetch = true) {
   const changePageSize = useCallback(
     (pageSize: number) => {
       dispatch(setPageSize(pageSize));
-      dispatch(fetchPosts({ ...pagination, pageSize, page: 1 }));
+      dispatch(fetchPosts({ ...pagination, pageSize, pageNumber: 1 }));
     },
     [dispatch, pagination]
   );
@@ -92,7 +92,7 @@ export function usePosts(initialFetch = true) {
   const search = useCallback(
     (searchQuery: string) => {
       dispatch(setSearch(searchQuery));
-      dispatch(fetchPosts({ ...pagination, search: searchQuery, page: 1 }));
+      dispatch(fetchPosts({ ...pagination, searchTerm: searchQuery, pageNumber: 1 }));
     },
     [dispatch, pagination]
   );
@@ -113,7 +113,7 @@ export function usePosts(initialFetch = true) {
 
   // CRUD operations
   const create = useCallback(
-    (data: CreatePostInput) => dispatch(createPost(data)),
+    (data: CreatePostInput) => dispatch(createPost(data as any)),
     [dispatch]
   );
 
@@ -185,9 +185,11 @@ export function usePosts(initialFetch = true) {
  */
 export function usePost(id: string | undefined) {
   const dispatch = useAppDispatch();
-  const postState = useAppSelector((state) =>
-    id ? state.posts.byId[id] || { data: null, isLoading: false, error: null, lastUpdated: null } : null
-  );
+  const posts = useAppSelector(selectPostsItems);
+  const isLoading = useAppSelector(selectPostsIsLoading);
+  const error = useAppSelector(selectPostsError);
+
+  const post = posts.find(p => p.id === id) || null;
 
   const fetch = useCallback(() => {
     if (id) {
@@ -196,10 +198,9 @@ export function usePost(id: string | undefined) {
   }, [dispatch, id]);
 
   return {
-    post: postState?.data || null,
-    isLoading: postState?.isLoading || false,
-    error: postState?.error || null,
-    lastUpdated: postState?.lastUpdated || null,
+    post,
+    isLoading,
+    error,
     fetch,
   };
 }

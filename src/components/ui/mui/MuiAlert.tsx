@@ -1,6 +1,7 @@
 'use client';
 
-import Alert, { AlertProps, AlertTitle } from '@mui/material/Alert';
+import Alert, { AlertProps } from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
 import { forwardRef } from 'react';
 
 export interface MuiAlertProps extends Omit<AlertProps, 'color'> {

@@ -24,7 +24,7 @@
 // Factory functions
 export { createCrudSlice } from './createCrudSlice';
 export { createCrudHooks } from './createCrudHooks';
-export { createApiService, createNestedApiService, createMockApiService } from './createApiService';
+export { createApiService, createNestedApiService } from './createApiService';
 
 // Types
 export * from './types';

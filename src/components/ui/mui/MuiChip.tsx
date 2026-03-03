@@ -3,7 +3,7 @@
 import Chip, { ChipProps } from '@mui/material/Chip';
 import { forwardRef } from 'react';
 
-export interface MuiChipProps extends Omit<ChipProps, 'color'> {
+export interface MuiChipProps extends Omit<ChipProps, 'color' | 'icon' | 'avatar'> {
   color?: 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info' | 'default';
   variant?: 'filled' | 'outlined';
   size?: 'small' | 'medium';
@@ -17,8 +17,8 @@ export interface MuiChipProps extends Omit<ChipProps, 'color'> {
  * MUI Chip wrapper component for use in server components.
  */
 const MuiChip = forwardRef<HTMLDivElement, MuiChipProps>(
-  ({ variant = 'filled', size = 'medium', ...props }, ref) => {
-    return <Chip variant={variant} size={size} ref={ref} {...props} />;
+  ({ variant = 'filled', size = 'medium', icon, avatar, ...props }, ref) => {
+    return <Chip variant={variant} size={size} icon={icon as any} avatar={avatar as any} ref={ref} {...props} />;
   }
 );
 

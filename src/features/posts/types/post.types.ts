@@ -8,6 +8,6 @@ export interface Post {
   updatedAt: string;
 }
 
-export type CreatePostInput = Omit<Post, 'id' | 'createdAt' | 'updatedAt'>;
-export type UpdatePostInput = Partial<Omit<Post, 'id' | 'createdAt'>>;
+// Re-export from Zod schema for type consistency
+// export type { CreatePostInput, UpdatePostInput } from '../schemas/post.schema';
 
